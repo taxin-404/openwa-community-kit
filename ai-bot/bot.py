@@ -42,6 +42,11 @@ CONTEXT_MESSAGES = int(os.environ.get("CONTEXT_MESSAGES", "10"))
 # 0 = answer every DM (even a lone "." ping) — never leave someone unread.
 # Set to 2 or higher to silently ignore dot/emoji-only pings.
 MIN_MESSAGE_CHARS = int(os.environ.get("MIN_MESSAGE_CHARS", "0"))
+# Grace window (seconds): incoming DMs wait unanswered this long first.
+# If you read the chat (its unread count drops to 0) or reply to the thread
+# yourself before it ends, the bot stays silent; if the message is still
+# unread after it, the bot answers. 0 = old instant-reply mode.
+UNREAD_WAIT_SECONDS = int(os.environ.get("UNREAD_WAIT_SECONDS", "300"))
 # Sent instead of silence when every AI model fails (quotas dry, network down).
 FALLBACK_TEXT = os.environ.get(
     "FALLBACK_TEXT",
@@ -268,9 +273,33 @@ def seed_seen(key: str, sid: str, state: dict) -> None:
             state["seen"][m["waMessageId"]] = int(time.time())
 
 
+def human_replied_newer(key: str, sid: str, chat: str, since: int) -> bool:
+    """True when the user's own outgoing message in this chat is newer than
+    the pending incoming one — they've taken over the thread themselves."""
+    try:
+        data = openwa(key, "GET", "/".join([
+            f"/sessions/{sid}/messages",
+            f"?chatId={urllib.parse.quote(chat)}&direction=outgoing&orderBy=timestamp&order=desc&limit=1",
+        ]))
+        msgs = data.get("messages", []) if isinstance(data, dict) else []
+        return bool(msgs) and int(msgs[0].get("timestamp") or 0) > since
+    except Exception:                                    # noqa: BLE001
+        return False        # signal unavailable → prefer answering
+
+
 def process(key: str, sid: str, state: dict) -> None:
     persona = read(PERSONA_FILE)
     now = int(time.time())
+    unread_map: dict[str, int] = {}
+    if UNREAD_WAIT_SECONDS:
+        try:
+            chats = openwa(key, "GET", f"/sessions/{sid}/chats?limit=60")
+            items = chats.get("chats", []) if isinstance(chats, dict) else (chats or [])
+            for c in items:
+                if c.get("id") is not None and c.get("unreadCount") is not None:
+                    unread_map[c["id"]] = int(c["unreadCount"])
+        except Exception as exc:                            # noqa: BLE001
+            log(f"unread-count fetch failed: {exc}")
     # Newest-first incoming page
     data = openwa(key, "GET", f"/sessions/{sid}/messages?direction=incoming&orderBy=timestamp&limit=20&inlineMedia=false")
     for m in reversed(data.get("messages", [])):          # oldest first
@@ -279,21 +308,35 @@ def process(key: str, sid: str, state: dict) -> None:
         chat = m.get("chatId") or ""
         if not wid or wid in state["seen"]:
             continue
-        state["seen"][wid] = now
         ts = m.get("timestamp") or 0
         stale = now - ts > STALE_SECONDS
         group = chat.endswith("@g.us")
         answerable = bool(body) and not stale and (ANSWER_GROUPS or not group) \
             and "status@broadcast" not in chat and "@broadcast" not in chat
-        save_state(state)
         if not answerable:
             reason = "older than STALE_SECONDS" if stale else \
                      "group chat" if group else \
                      "media/empty body" if not body else "broadcast/status"
+            state["seen"][wid] = now
+            save_state(state)
             log(f"skip {chat} ({reason}) wa={wid[:24]}")
             continue
         if len(re.findall(r"[^\W_]", body, re.UNICODE)) < MIN_MESSAGE_CHARS:
+            state["seen"][wid] = now
+            save_state(state)
             log(f"skip {chat} (punctuation-only / too short) wa={wid[:24]}")
+            continue
+        if UNREAD_WAIT_SECONDS and now - ts < UNREAD_WAIT_SECONDS:
+            continue                        # grace window: leave unseen, re-check next cycle
+        if UNREAD_WAIT_SECONDS and unread_map.get(chat, 0) == 0:
+            state["seen"][wid] = now
+            save_state(state)
+            log(f"skip {chat} (you already read this chat) wa={wid[:24]}")
+            continue
+        if UNREAD_WAIT_SECONDS and human_replied_newer(key, sid, chat, ts):
+            state["seen"][wid] = now
+            save_state(state)
+            log(f"skip {chat} (you answered newer yourself) wa={wid[:24]}")
             continue
         if now < state["last_reply"].get(chat, 0) + COOLDOWN_SECONDS:
             log(f"cooldown {chat} — skipping auto-reply this round")
@@ -323,6 +366,7 @@ def process(key: str, sid: str, state: dict) -> None:
         except urllib.error.HTTPError as exc:
             log(f"send failed for {chat}: HTTP {exc.code} {exc.read()[:200]!r}")
             continue
+        state["seen"][wid] = now
         state["last_reply"][chat] = now
         save_state(state)
         log(f"replied {chat} → {reply[:60]!r}")

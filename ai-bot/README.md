@@ -15,6 +15,9 @@ Safety rails built in:
 - replies only to **direct chats** (`ANSWER_GROUPS=0` in `ai-bot.env`)
 - **45 s cooldown** per chat so it can never spam
 - skips messages **older than 60 min** (no burst after restart) and your own sends
+- **5-minute grace window** (`UNREAD_WAIT_SECONDS=300`): a DM only gets an
+  auto-reply if it is *still unread* after 5 minutes — read the chat on your
+  phone (or answer the thread yourself) in time, and the bot stays silent
 - **never leaves a DM unanswered**: every message gets a reply — even a lone
   "." (`MIN_MESSAGE_CHARS=0`); if every AI model fails (all quotas dry,
   network down) it still sends a short `FALLBACK_TEXT` so nobody gets silence
