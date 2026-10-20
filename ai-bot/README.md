@@ -15,8 +15,9 @@ Safety rails built in:
 - replies only to **direct chats** (`ANSWER_GROUPS=0` in `ai-bot.env`)
 - **45 s cooldown** per chat so it can never spam
 - skips messages **older than 60 min** (no burst after restart) and your own sends
-- skips **punctuation-only pings** (".", "???", emoji-only) — `MIN_MESSAGE_CHARS=2`;
-  real words in any language (including Bangla) always pass
+- **never leaves a DM unanswered**: every message gets a reply — even a lone
+  "." (`MIN_MESSAGE_CHARS=0`); if every AI model fails (all quotas dry,
+  network down) it still sends a short `FALLBACK_TEXT` so nobody gets silence
 - first boot marks history as seen instead of answering everything at once
 - **auto-discovered model chain**: startup lists every chat-capable Gemini model
   on your key (free-tier lites first, newest first, image/TTS/robotics junk

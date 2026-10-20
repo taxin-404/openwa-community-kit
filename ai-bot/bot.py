@@ -39,9 +39,13 @@ POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "6"))
 STALE_SECONDS = int(os.environ.get("STALE_SECONDS", "300"))      # skip messages older than this
 COOLDOWN_SECONDS = int(os.environ.get("REPLY_COOLDOWN_SECONDS", "45"))
 CONTEXT_MESSAGES = int(os.environ.get("CONTEXT_MESSAGES", "10"))
-# Messages with fewer word-chars than this (e.g. ".", "???", emoji-only)
-# are ignored without burning an AI reply. 0 = answer everything.
-MIN_MESSAGE_CHARS = int(os.environ.get("MIN_MESSAGE_CHARS", "2"))
+# 0 = answer every DM (even a lone "." ping) — never leave someone unread.
+# Set to 2 or higher to silently ignore dot/emoji-only pings.
+MIN_MESSAGE_CHARS = int(os.environ.get("MIN_MESSAGE_CHARS", "0"))
+# Sent instead of silence when every AI model fails (quotas dry, network down).
+FALLBACK_TEXT = os.environ.get(
+    "FALLBACK_TEXT",
+    "🤖 (auto-reply) ami ekhon answer dite parchi na — ektu por abar likhben!")
 ANSWER_GROUPS = os.environ.get("ANSWER_GROUPS", "0") == "1"
 
 
@@ -311,8 +315,8 @@ def process(key: str, sid: str, state: dict) -> None:
         try:
             reply = ai_reply(persona, prompt, state)
         except Exception as exc:                            # noqa: BLE001
-            log(f"LLM error for {chat}: {exc}")
-            continue
+            log(f"LLM error for {chat}: {exc} — sending fallback text")
+            reply = FALLBACK_TEXT
         # --- send ----------------------------------------------------------
         try:
             openwa(key, "POST", f"/sessions/{sid}/messages/send-text", {"chatId": chat, "text": reply})
