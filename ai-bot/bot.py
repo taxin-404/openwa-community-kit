@@ -39,6 +39,9 @@ POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "6"))
 STALE_SECONDS = int(os.environ.get("STALE_SECONDS", "300"))      # skip messages older than this
 COOLDOWN_SECONDS = int(os.environ.get("REPLY_COOLDOWN_SECONDS", "45"))
 CONTEXT_MESSAGES = int(os.environ.get("CONTEXT_MESSAGES", "10"))
+# Messages with fewer word-chars than this (e.g. ".", "???", emoji-only)
+# are ignored without burning an AI reply. 0 = answer everything.
+MIN_MESSAGE_CHARS = int(os.environ.get("MIN_MESSAGE_CHARS", "2"))
 ANSWER_GROUPS = os.environ.get("ANSWER_GROUPS", "0") == "1"
 
 
@@ -169,7 +172,7 @@ def selftest_models(models: list[str], state: dict, persist: bool = True) -> Non
         log(f"self-test: {alive} alive")
 
 
-def chat(persona: str, prompt: str, state: dict, persist: bool = True) -> str:
+def ai_reply(persona: str, prompt: str, state: dict, persist: bool = True) -> str:
     """One-by-one: drain each model's daily quota before moving to the next.
 
     429-per-day and unavailable (404/403) models advance a persisted cursor;
@@ -239,7 +242,7 @@ def chat(persona: str, prompt: str, state: dict, persist: bool = True) -> str:
 
 def gemini(persona: str, prompt: str) -> str:
     """Cheap test-path wrapper: walk the chain without touching the cursor."""
-    return chat(persona, prompt, {}, persist=False)
+    return ai_reply(persona, prompt, {}, persist=False)
 
 
 def load_state() -> dict:
@@ -285,6 +288,9 @@ def process(key: str, sid: str, state: dict) -> None:
                      "media/empty body" if not body else "broadcast/status"
             log(f"skip {chat} ({reason}) wa={wid[:24]}")
             continue
+        if len(re.findall(r"[^\W_]", body, re.UNICODE)) < MIN_MESSAGE_CHARS:
+            log(f"skip {chat} (punctuation-only / too short) wa={wid[:24]}")
+            continue
         if now < state["last_reply"].get(chat, 0) + COOLDOWN_SECONDS:
             log(f"cooldown {chat} — skipping auto-reply this round")
             continue
@@ -303,7 +309,7 @@ def process(key: str, sid: str, state: dict) -> None:
         prompt = f"Conversation with community member {m.get('chatName') or m.get('from')}:\n\n{transcript}\n\nWrite ONLY the next assistant reply."
         # --- think ---------------------------------------------------------
         try:
-            reply = chat(persona, prompt, state)
+            reply = ai_reply(persona, prompt, state)
         except Exception as exc:                            # noqa: BLE001
             log(f"LLM error for {chat}: {exc}")
             continue
