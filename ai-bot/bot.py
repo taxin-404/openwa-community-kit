@@ -12,6 +12,7 @@ Manual:  python3 bot.py test "why is the building closed"   -> prints answer onl
 import json
 import os
 import pathlib
+import re
 import sys
 import time
 import urllib.error
@@ -26,7 +27,10 @@ OPENWA_URL = os.environ.get("OPENWA_URL", "http://localhost:2785/api").rstrip("/
 OPENWA_KEY_FILE = os.environ.get("OPENWA_KEY_FILE", str(BASE_DIR.parent / ".ai-agent-key"))
 SESSION_ID_FILE = os.environ.get("SESSION_ID_FILE", str(BASE_DIR.parent / "reminders" / "session-id"))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
+GEMINI_AUTO_CHAIN = os.environ.get("GEMINI_AUTO_CHAIN", "1") == "1"
+_auto_cache: list[str] | None = None
+_auto_at = 0.0
 POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "6"))
 STALE_SECONDS = int(os.environ.get("STALE_SECONDS", "300"))      # skip messages older than this
 COOLDOWN_SECONDS = int(os.environ.get("REPLY_COOLDOWN_SECONDS", "45"))
@@ -79,25 +83,104 @@ def gemini_call(model: str, persona: str, prompt: str) -> str:
     return parts.strip()
 
 
-def gemini(persona: str, prompt: str) -> str:
-    """Try GEMINI_MODEL first, then any fallbacks (each has its own free-tier RPD bucket)."""
+def auto_chain(key: str) -> list[str]:
+    """Discover every chat-capable Gemini model on the key, cheapest (lites) first."""
+    global _auto_cache, _auto_at
+    now = time.time()
+    if _auto_cache is not None and now - _auto_at < 86400:
+        return _auto_cache
+    try:
+        req = urllib.request.Request(
+            "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+            headers={"x-goog-api-key": GEMINI_API_KEY},
+        )
+        data = json.loads(urllib.request.urlopen(req, timeout=30).read())
+        names = set()
+        for m in data.get("models", []):
+            name = (m.get("name") or "").split("/")[-1]
+            methods = m.get("supportedGenerationMethods") or []
+            if "generateContent" not in methods:
+                continue
+            if not name.startswith("gemini-"):
+                continue
+            if re.search(r"tts|live|audio|image|omni|banana|computer-use|robotics|customtools|transcribe|thinking|embedding|latest", name, re.I):
+                continue
+            names.add(name)
+        def rank(n: str):
+            v = re.search(r"(\d+)(?:\.(\d+))?", n)
+            ver = (float(v.group(1)) + float(v.group(2) or 0) / 10) if v else 0.0
+            group = 0 if "lite" in n else (2 if "pro" in n else 1)
+            return (group, -ver)
+        _auto_cache = sorted(names, key=rank)
+        _auto_at = now
+        log(f"model chain discovered ({len(_auto_cache)}): {', '.join(_auto_cache[:5])} …")
+    except Exception as exc:                                 # noqa: BLE001
+        log(f"model discovery failed ({exc}) — using manual list for now")
+        _auto_at = now - 1800        # retry discovery in ~30 min
+    return _auto_cache or []
+
+
+def chat(persona: str, prompt: str, state: dict, persist: bool = True) -> str:
+    """One-by-one: drain each model's daily quota before moving to the next.
+
+    429-per-day and unavailable (404/403) models advance a persisted cursor;
+    transient errors (5xx/timeouts, 429-per-minute) are skipped for just this
+    message. When the last model dies too, the cursor wraps back to the first
+    (earlier buckets refilled overnight)."""
     models = [GEMINI_MODEL.strip()]
-    raw = os.environ.get("GEMINI_MODEL_FALLBACKS", "") or os.environ.get("GEMINI_MODEL_FALLBACK", "")
-    for m in raw.split(","):
-        m = m.strip()
-        if m and m not in models:
-            models.append(m)
-    last_exc: Exception = RuntimeError("no model configured")
-    for model in models:
+    if GEMINI_AUTO_CHAIN:
+        for m in auto_chain(GEMINI_API_KEY):
+            if m not in models:
+                models.append(m)
+    if not GEMINI_AUTO_CHAIN or not _auto_cache:
+        raw = os.environ.get("GEMINI_MODEL_FALLBACKS", "") or os.environ.get("GEMINI_MODEL_FALLBACK", "")
+        for m in raw.split(","):
+            m = m.strip()
+            if m and m not in models:
+                models.append(m)
+    models = models[:14]
+
+    cursor = min(int(state.get("model_cursor", 0)), len(models) - 1)
+    last_exc: Exception = RuntimeError("no LLM model configured")
+    for i in range(cursor, len(models)):
+        model = models[i]
         try:
             out = gemini_call(model, persona, prompt)
-            if model != models[0]:
-                log(f"earlier model(s) failed → used fallback {model}")
+            state["model_cursor"] = i
+            if persist:
+                save_state(state)
+            if i != cursor:
+                log(f"switched → {model} (position {i}/{len(models) - 1})")
             return out
-        except Exception as exc:                             # noqa: BLE001
+        except urllib.error.HTTPError as exc:
+            body = ""
+            try:
+                body = exc.read().decode(errors="ignore")[:2000]
+            except Exception:                                # noqa: BLE001
+                pass
+            if exc.code in (404, 403) or "PerDay" in body or (
+                    exc.code == 429 and "PerMinute" not in body):
+                log(f"{model}: daily bucket finished/unavailable → next model")
+                if i + 1 < len(models):
+                    state["model_cursor"] = i + 1
+                    if persist:
+                        save_state(state)
+                else:
+                    state["model_cursor"] = 0                 # wrap around
+                    if persist:
+                        save_state(state)
+            else:
+                log(f"{model}: transient error (HTTP {exc.code}) — skipping for this message")
             last_exc = exc
-            log(f"model {model} failed: {exc}")
+        except Exception as exc:                             # noqa: BLE001
+            log(f"{model}: transient error ({exc}) — skipping for this message")
+            last_exc = exc
     raise last_exc
+
+
+def gemini(persona: str, prompt: str) -> str:
+    """Cheap test-path wrapper: walk the chain without touching the cursor."""
+    return chat(persona, prompt, {}, persist=False)
 
 
 def load_state() -> dict:
@@ -161,9 +244,9 @@ def process(key: str, sid: str, state: dict) -> None:
         prompt = f"Conversation with community member {m.get('chatName') or m.get('from')}:\n\n{transcript}\n\nWrite ONLY the next assistant reply."
         # --- think ---------------------------------------------------------
         try:
-            reply = gemini(persona, prompt)
+            reply = chat(persona, prompt, state)
         except Exception as exc:                            # noqa: BLE001
-            log(f"Gemini error for {chat}: {exc}")
+            log(f"LLM error for {chat}: {exc}")
             continue
         # --- send ----------------------------------------------------------
         try:

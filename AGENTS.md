@@ -89,11 +89,13 @@ below exactly.
   `GEMINI_API_KEY=` themselves (or run: `systemctl --user`-style commands).
   Alternatively accept it in chat and write it straight into the file — but
   never repeat it back afterwards.
-- Ensure the file holds real home paths and this model chain:
-  `GEMINI_MODEL=gemini-3.5-flash-lite` and
-  `GEMINI_MODEL_FALLBACKS=gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash,gemini-2.5-flash-lite`
-  (comma chain; each model has its own daily free-tier RPD bucket, and a 429 or
-  404 on one model hands work to the next automatically).
+- Ensure the file holds real home paths and these settings:
+  `GEMINI_MODEL=gemini-3.5-flash-lite` and `GEMINI_AUTO_CHAIN=1`
+  (with auto-chain the bot discovers every chat-capable Gemini model on the key
+  at startup and walks it one-by-one — each model drains its daily free-tier RPD
+  bucket before the next takes over; the cursor survives restarts).
+  `GEMINI_MODEL_FALLBACKS=...` stays as the manual safety net for discovery
+  failures — leave its line as shipped.
 - `python3 -m py_compile ~/openwa/ai-bot/bot.py`, then
   `systemctl --user restart openwa-ai-bot`, then verify with
   `python3 ~/openwa/ai-bot/bot.py test "hello?"` — it prints an answer and

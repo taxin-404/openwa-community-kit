@@ -21,8 +21,8 @@ drive the gateway.
                             │                   │                  │
       send text (calls) ────┘   poll & reply ───┘        tools ────┘
                             │                   │
-                  reminders/send-reminder.sh   ai-bot/bot.py  (Gemini 3.5-lite
-                          + cron (monthly)      → fallback 3.1-lite, systemd)
+                  reminders/send-reminder.sh   ai-bot/bot.py  (auto-discovered
+                          + cron (monthly)      model chain, systemd)
 ```
 
 Everything runs on **one Linux box with Docker**. Nothing is exposed beyond
@@ -121,9 +121,13 @@ messages of the chat as context, and sends the reply back. Guards:
 
 - **DMs only** (`ANSWER_GROUPS=0`), 45 s per-chat cooldown, skips media/sticker
   texts, skips anything older than 60 min, first boot marks history as seen
-- **Model fallback chain**: tries `gemini-3.5-flash-lite`, and on *any* error —
-  including the daily free-tier RPD quota (HTTP 429) — walks
-  `GEMINI_MODEL_FALLBACKS` (default `3.1-flash-lite, 3.6-flash, 2.5-flash, 2.5-flash-lite`).
+- **Auto-discovered model chain**: the bot lists every chat-capable Gemini
+  model on your key at startup (free-tier lites first, newest first) —
+  including the daily free-tier RPD quota (HTTP 429) — and walks it
+  **one-by-one**: it drains each model's daily bucket before moving to the
+  next, sticks on the current model between messages and restarts
+  (persisted cursor), and wraps back to the first once everything is dry.
+  Set `GEMINI_AUTO_CHAIN=0` to use the manual `GEMINI_MODEL_FALLBACKS` list instead.
   Each model has its own daily RPD bucket, and restricted/unknown models in
   the chain are skipped silently.
 - Never sends anything if Gemini fails; it just retries on the next message.

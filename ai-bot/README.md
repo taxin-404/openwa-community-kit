@@ -16,10 +16,13 @@ Safety rails built in:
 - **45 s cooldown** per chat so it can never spam
 - skips messages **older than 60 min** (no burst after restart) and your own sends
 - first boot marks history as seen instead of answering everything at once
-- **model fallback chain**: primary `gemini-3.5-flash-lite`, then any failure —
-  including the daily free-tier RPD quota (HTTP 429) — walks
-  `GEMINI_MODEL_FALLBACKS` (default `3.1-flash-lite, 3.6-flash, 2.5-flash, 2.5-flash-lite`);
-  each model owns a separate RPD bucket, restricted/unknown ones are skipped
+- **auto-discovered model chain**: startup lists every chat-capable Gemini model
+  on your key (free-tier lites first, newest first, image/TTS/robotics junk
+  excluded), then walks it **one-by-one** — each model drains its daily RPD
+  bucket before the bot moves to the next. The cursor survives restarts and
+  wraps around when all buckets are dry; any error (429 quota, 404/403
+  restricted, 5xx flake) just hops to the next model. Set `GEMINI_AUTO_CHAIN=0`
+  to fall back to the manual `GEMINI_MODEL_FALLBACKS` list
 
 ## Turn it on
 1. Get a free key: https://aistudio.google.com/apikey
