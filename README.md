@@ -1,5 +1,11 @@
 # OpenWA Community Kit
 
+> 🤖 **Don't want to do this manually?** → see [`AGENTS.md`](./AGENTS.md).
+> Clone this repo, open it with an AI coding agent (OpenCode / Claude Code / …)
+> and say: *"follow AGENTS.md and set everything up for me."*
+> The agent performs the whole setup and stops only at the 3 gates that need a
+> human: a sudo command, a WhatsApp QR scan, and the Gemini API key.
+
 Self-hosted WhatsApp for a small community: **monthly reminders to a list of
 contacts** + an **AI (Gemini) auto-reply** for direct messages when you're busy,
 plus an optional **AI-assistant hook** so an agent (Claude, OpenCode, …) can
