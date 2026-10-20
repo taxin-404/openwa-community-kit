@@ -1,0 +1,6 @@
+🔔 Reminder: our next community meeting is soon. Details will follow — reply to me if you have questions.
+
+You may use {{name}} in the text for personalization — but only if EVERY line
+in contacts.txt has a name after the |.
+
+Copy this file to message.txt and edit any time — each run sends what's here.

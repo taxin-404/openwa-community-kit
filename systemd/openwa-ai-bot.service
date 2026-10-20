@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenWA AI auto-reply bot (Gemini)
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 __HOME__/openwa/ai-bot/bot.py
+EnvironmentFile=__HOME__/openwa/ai-bot/ai-bot.env
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,20 @@
+# Secrets & machine-local state — NEVER commit these
+.api-key
+.ai-agent-key
+*.key
+ai-bot.env
+ai-bot/state.json
+reminders/session-id
+reminders/payload-chunk-*.json
+reminders/chunks.txt
+reminders/last-response.json
+reminders/cron.log
+reminders/contacts.txt
+reminders/message.txt
+ai-bot/persona.txt
+reminders/session-qr.png
+
+# OS noise
+.DS_Store
+*.pyc
+__pycache__/

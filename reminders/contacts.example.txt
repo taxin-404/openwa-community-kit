@@ -1,0 +1,13 @@
+# One contact per line:
+#   8801712345678             <- phone only
+#   8801712345678|Amina       <- phone + name (lets the message say "Hi {{name}}")
+#
+# phone = country code + number, digits only (no +, no spaces, no dashes)
+# lines starting with # are ignored
+#
+# examples:
+#   8801712345678|Amina
+#   6281234567890|Fahim
+#
+# Copy this file to contacts.txt and fill in your community list.
+# Reminder: only contacts who expect messages from you belong here.
