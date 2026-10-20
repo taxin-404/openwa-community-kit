@@ -121,10 +121,11 @@ messages of the chat as context, and sends the reply back. Guards:
 
 - **DMs only** (`ANSWER_GROUPS=0`), 45 s per-chat cooldown, skips media/sticker
   texts, skips anything older than 60 min, first boot marks history as seen
-- **Model fallback**: tries `gemini-3.5-flash-lite`, and on *any* error —
-  including the daily free-tier quota (HTTP 429) — switches to
-  `gemini-3.1-flash-lite`. Both buckets are independent, so quota exhaustion
-  on one model doesn't stop the bot.
+- **Model fallback chain**: tries `gemini-3.5-flash-lite`, and on *any* error —
+  including the daily free-tier RPD quota (HTTP 429) — walks
+  `GEMINI_MODEL_FALLBACKS` (default `3.1-flash-lite, 3.6-flash, 2.5-flash-lite`).
+  Each model has its own daily RPD bucket, and restricted/unknown models in
+  the chain are skipped silently.
 - Never sends anything if Gemini fails; it just retries on the next message.
 
 Steps: create your OpenWA **OPERATOR key** scoped to the one session

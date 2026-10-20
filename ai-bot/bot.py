@@ -80,17 +80,19 @@ def gemini_call(model: str, persona: str, prompt: str) -> str:
 
 
 def gemini(persona: str, prompt: str) -> str:
-    """Try GEMINI_MODEL first, fall back to GEMINI_MODEL_FALLBACK on any error."""
+    """Try GEMINI_MODEL first, then any fallbacks (each has its own free-tier RPD bucket)."""
     models = [GEMINI_MODEL.strip()]
-    fallback = os.environ.get("GEMINI_MODEL_FALLBACK", "").strip()
-    if fallback and fallback not in models:
-        models.append(fallback)
+    raw = os.environ.get("GEMINI_MODEL_FALLBACKS", "") or os.environ.get("GEMINI_MODEL_FALLBACK", "")
+    for m in raw.split(","):
+        m = m.strip()
+        if m and m not in models:
+            models.append(m)
     last_exc: Exception = RuntimeError("no model configured")
     for model in models:
         try:
             out = gemini_call(model, persona, prompt)
             if model != models[0]:
-                log(f"primary model failed → used fallback {model}")
+                log(f"earlier model(s) failed → used fallback {model}")
             return out
         except Exception as exc:                             # noqa: BLE001
             last_exc = exc
