@@ -91,7 +91,7 @@ below exactly.
   never repeat it back afterwards.
 - Ensure the file holds real home paths and this model chain:
   `GEMINI_MODEL=gemini-3.5-flash-lite` and
-  `GEMINI_MODEL_FALLBACKS=gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash-lite`
+  `GEMINI_MODEL_FALLBACKS=gemini-3.1-flash-lite,gemini-3.6-flash,gemini-2.5-flash,gemini-2.5-flash-lite`
   (comma chain; each model has its own daily free-tier RPD bucket, and a 429 or
   404 on one model hands work to the next automatically).
 - `python3 -m py_compile ~/openwa/ai-bot/bot.py`, then

@@ -18,7 +18,7 @@ Safety rails built in:
 - first boot marks history as seen instead of answering everything at once
 - **model fallback chain**: primary `gemini-3.5-flash-lite`, then any failure —
   including the daily free-tier RPD quota (HTTP 429) — walks
-  `GEMINI_MODEL_FALLBACKS` (default `3.1-flash-lite, 3.6-flash, 2.5-flash-lite`);
+  `GEMINI_MODEL_FALLBACKS` (default `3.1-flash-lite, 3.6-flash, 2.5-flash, 2.5-flash-lite`);
   each model owns a separate RPD bucket, restricted/unknown ones are skipped
 
 ## Turn it on

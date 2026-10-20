@@ -123,7 +123,7 @@ messages of the chat as context, and sends the reply back. Guards:
   texts, skips anything older than 60 min, first boot marks history as seen
 - **Model fallback chain**: tries `gemini-3.5-flash-lite`, and on *any* error —
   including the daily free-tier RPD quota (HTTP 429) — walks
-  `GEMINI_MODEL_FALLBACKS` (default `3.1-flash-lite, 3.6-flash, 2.5-flash-lite`).
+  `GEMINI_MODEL_FALLBACKS` (default `3.1-flash-lite, 3.6-flash, 2.5-flash, 2.5-flash-lite`).
   Each model has its own daily RPD bucket, and restricted/unknown models in
   the chain are skipped silently.
 - Never sends anything if Gemini fails; it just retries on the next message.
