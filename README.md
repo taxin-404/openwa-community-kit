@@ -127,6 +127,10 @@ messages of the chat as context, and sends the reply back. Guards:
   **one-by-one**: it drains each model's daily bucket before moving to the
   next, sticks on the current model between messages and restarts
   (persisted cursor), and wraps back to the first once everything is dry.
+  A **boot self-test** probes every discovered model and benches the gated
+  ones ("limit: 0", *not available to new users*) for 24 h — on this key that
+  removes `2.5-flash-lite`, `2.5-pro`, `4-argon`, `3.1-pro-preview` from the
+  walk; they are re-probed on every restart, so a healed model rejoins.
   Set `GEMINI_AUTO_CHAIN=0` to use the manual `GEMINI_MODEL_FALLBACKS` list instead.
   Each model has its own daily RPD bucket, and restricted/unknown models in
   the chain are skipped silently.

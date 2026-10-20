@@ -19,6 +19,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 BASE_DIR = pathlib.Path(__file__).resolve().parent
 STATE_FILE = BASE_DIR / "state.json"
 PERSONA_FILE = BASE_DIR / "persona.txt"
@@ -31,6 +33,8 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 GEMINI_AUTO_CHAIN = os.environ.get("GEMINI_AUTO_CHAIN", "1") == "1"
 _auto_cache: list[str] | None = None
 _auto_at = 0.0
+GEMINI_SELFTEST = os.environ.get("GEMINI_SELFTEST", "1") == "1"
+DEAD_TTL = 86400          # benched models are retried after 24 h
 POLL_SECONDS = float(os.environ.get("POLL_SECONDS", "6"))
 STALE_SECONDS = int(os.environ.get("STALE_SECONDS", "300"))      # skip messages older than this
 COOLDOWN_SECONDS = int(os.environ.get("REPLY_COOLDOWN_SECONDS", "45"))
@@ -120,6 +124,51 @@ def auto_chain(key: str) -> list[str]:
     return _auto_cache or []
 
 
+def selftest_models(models: list[str], state: dict, persist: bool = True) -> None:
+    """Probe every discovered model once at boot; bench the dead ones for 24 h.
+
+    A bench verdict is a hard "not available on this key": 404/403 (gated,
+    e.g. 'no longer available to new users') or a quota error that says
+    `limit: 0`. Transient failures (5xx overload, network) keep the model
+    alive — the chain hops those anyway during the day. Benched models are
+    re-probed on every restart, so healing is automatic."""
+    def probe(name: str):
+        try:
+            gemini_call(name, "", "Reply with exactly: OK")
+            return name, None
+        except urllib.error.HTTPError as exc:
+            body = ""
+            try:
+                body = exc.read().decode(errors="ignore")[:2000]
+            except Exception:                                # noqa: BLE001
+                pass
+            if exc.code in (404, 403) or "limit: 0" in body:
+                return name, f"HTTP {exc.code}"
+            return name, None
+        except Exception as exc:                             # noqa: BLE001
+            return name, None
+    benched: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futs = [pool.submit(probe, m) for m in models]
+        for fut in as_completed(futs):
+            name, why = fut.result()
+            if why:
+                benched[name] = why
+    now = time.time()
+    fresh_dead = {m: t for m, t in state.get("dead_models", {}).items()
+                  if now - t < DEAD_TTL}
+    for m in benched:
+        fresh_dead[m] = now
+    state["dead_models"] = fresh_dead
+    if persist:
+        save_state(state)
+    alive = len(models) - len(benched)
+    if benched:
+        log(f"self-test: {alive} alive, benched for 24 h: {', '.join(benched)}")
+    else:
+        log(f"self-test: {alive} alive")
+
+
 def chat(persona: str, prompt: str, state: dict, persist: bool = True) -> str:
     """One-by-one: drain each model's daily quota before moving to the next.
 
@@ -138,6 +187,11 @@ def chat(persona: str, prompt: str, state: dict, persist: bool = True) -> str:
             m = m.strip()
             if m and m not in models:
                 models.append(m)
+    dead = {m: t for m, t in state.get("dead_models", {}).items()
+            if time.time() - t < DEAD_TTL}
+    usable = [m for m in models if m not in dead]
+    if usable:                                              # try benched
+        models = usable                                   # only if all else gone
     models = models[:14]
 
     cursor = min(int(state.get("model_cursor", 0)), len(models) - 1)
@@ -158,9 +212,14 @@ def chat(persona: str, prompt: str, state: dict, persist: bool = True) -> str:
                 body = exc.read().decode(errors="ignore")[:2000]
             except Exception:                                # noqa: BLE001
                 pass
-            if exc.code in (404, 403) or "PerDay" in body or (
-                    exc.code == 429 and "PerMinute" not in body):
-                log(f"{model}: daily bucket finished/unavailable → next model")
+            if exc.code in (404, 403) or "limit: 0" in body:
+                log(f"{model}: not available on this key → benched for 24 h, next model")
+                dead = state.setdefault("dead_models", {})
+                dead[model] = time.time()
+                if persist:
+                    save_state(state)
+            elif "PerDay" in body or (exc.code == 429 and "PerMinute" not in body):
+                log(f"{model}: daily bucket finished → next model")
                 if i + 1 < len(models):
                     state["model_cursor"] = i + 1
                     if persist:
@@ -270,6 +329,11 @@ def run_forever() -> None:
         seed_seen(key, sid, state)
         save_state(state)
         log(f"seeded {len(state['seen'])} existing message(s) as seen")
+    if GEMINI_SELFTEST and GEMINI_API_KEY:
+        boot_chain = [GEMINI_MODEL.strip()]
+        boot_chain += [m for m in auto_chain(GEMINI_API_KEY) if m not in boot_chain]
+        if _auto_cache:
+            selftest_models(boot_chain, state)
     log(f"watching session {sid} every {POLL_SECONDS}s (model {GEMINI_MODEL})")
     while True:
         try:

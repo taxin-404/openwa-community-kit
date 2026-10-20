@@ -94,6 +94,8 @@ below exactly.
   (with auto-chain the bot discovers every chat-capable Gemini model on the key
   at startup and walks it one-by-one — each model drains its daily free-tier RPD
   bucket before the next takes over; the cursor survives restarts).
+  `GEMINI_SELFTEST=1` (default) probes every model at boot and benches the
+  gated/limit-0 ones for 24 h — expect a journal line listing them.
   `GEMINI_MODEL_FALLBACKS=...` stays as the manual safety net for discovery
   failures — leave its line as shipped.
 - `python3 -m py_compile ~/openwa/ai-bot/bot.py`, then

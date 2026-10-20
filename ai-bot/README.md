@@ -21,7 +21,10 @@ Safety rails built in:
   excluded), then walks it **one-by-one** — each model drains its daily RPD
   bucket before the bot moves to the next. The cursor survives restarts and
   wraps around when all buckets are dry; any error (429 quota, 404/403
-  restricted, 5xx flake) just hops to the next model. Set `GEMINI_AUTO_CHAIN=0`
+  restricted, 5xx flake) just hops to the next model. A **boot self-test**
+  (`GEMINI_SELFTEST=1`) probes every discovered model once and benches the
+  gated/limit-0 ones for 24 h so they never cost a hop in real traffic.
+  Set `GEMINI_AUTO_CHAIN=0`
   to fall back to the manual `GEMINI_MODEL_FALLBACKS` list
 
 ## Turn it on
