@@ -71,14 +71,18 @@ echo PASTE-SESSION-UUID > ~/openwa/reminders/session-id   # dir created in step 
 
 ## 4. Install this kit
 
+**With an AI agent (recommended):** open the cloned folder with your coding
+agent (OpenCode, Claude Code, …) and say *"follow AGENTS.md and set everything
+up for me"* — the agent handles every step below and pauses only at the three
+human gates (sudo password, QR scan, Gemini key).
+
+**Manually:**
+
 ```bash
 git clone https://github.com/<you>/openwa-kit.git ~/openwa-kit
 cd ~/openwa-kit
 ./install.sh            # installs into ~/openwa by default
 ```
-
-The installer copies the scripts, templates, and systemd unit, then prints the
-few manual steps (keys, session id, Gemini key) that must never be automated.
 
 ## 5. Reminder (cron-ready, scheduled later)
 
