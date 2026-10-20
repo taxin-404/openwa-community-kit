@@ -1,10 +1,13 @@
 # OpenWA Community Kit
 
-> 🤖 **Don't want to do this manually?** → see [`AGENTS.md`](./AGENTS.md).
-> Clone this repo, open it with an AI coding agent (OpenCode / Claude Code / …)
-> and say: *"follow AGENTS.md and set everything up for me."*
+> 🤖 **Don't want to do this manually?** Open this folder with an AI coding
+> agent (OpenCode / Claude Code / …), copy the prompt below, and paste it.
 > The agent performs the whole setup and stops only at the 3 gates that need a
 > human: a sudo command, a WhatsApp QR scan, and the Gemini API key.
+
+```text
+Open AGENTS.md and follow it completely to set up my WhatsApp community kit: install and start OpenWA in Docker, create the session, generate and show me the QR to link my phone, mint the least-privilege OPERATOR key, run the kit installer, configure the Gemini auto-reply bot (gemini-3.5-flash-lite with gemini-3.1-flash-lite fallback), enable the systemd service, verify everything works, and only stop and ask me at the three human gates: the sudo command, the QR scan, and pasting my Gemini API key.
+```
 
 Self-hosted WhatsApp for a small community: **monthly reminders to a list of
 contacts** + an **AI (Gemini) auto-reply** for direct messages when you're busy,
